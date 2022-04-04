@@ -32,23 +32,86 @@ class Netbox_Device():
         #print (resp)
         return resp['results']
 
-    def check_ssh_device_exists(self, device_facts, netbox_device_list):
+    def get_netbox_device_types(self):  
+        resp = requests.get(self.apiBaseUrl + '/dcim/device-types/',
+                        headers=self.headers).json()
+    
+        #print (resp)
+        return resp['results']
+
+    def get_netbox_device_roles(self):  
+        resp = requests.get(self.apiBaseUrl + '/dcim/device-roles/',
+                        headers=self.headers).json()
+    
+        #print (resp)
+        return resp['results']
+
+    def get_netbox_device_platforms(self):  
+        resp = requests.get(self.apiBaseUrl + '/dcim/platforms/',
+                        headers=self.headers).json()
+    
+        #print (resp)
+        return resp['results']
+
+    def get_netbox_device_sites(self):  
+        resp = requests.get(self.apiBaseUrl + '/dcim/sites/',
+                        headers=self.headers).json()
+    
+        #print (resp)
+        return resp['results']
+
+
+    def netbox_device_instance_data(self, ssh_device_facts, netbox_device_list):
         for nb_device in netbox_device_list:
-            if device_facts['hostname'] == nb_device['name']:
+            if ssh_device_facts['hostname'] == nb_device['name']:
                 self.nb_device = nb_device
                 return True
 
     def check_mgmt_interface_exists(self, interface_list):
+        print('Checking if MGMT interface exists in Netbox...')
         for i in interface_list:
             if i['device']['id'] == self.nb_device['id']:
                 if self.nb_device['device_type']['manufacturer']['name'] == 'Arista' and i['name'] == 'Management1':
+                    self.nb_interface_data = i
+                    print('Found existing Arista MGMT device in Netbox.')
                     return True
                 elif self.nb_device['device_type']['manufacturer']['name'] == 'Cisco Systems, Inc.' and i['name'] == 'mgmt0':
+                    self.nb_interface_data = i
+                    print('Found existing Cisco NXOS MGMT device in Netbox.')
                     return True
                 else:
+                    print('Interface Error.')
                     return False
             
         return False
+
+    def check_ipaddress_exists(self, ipaddress_list, ssh_device_facts):
+        print(f'Checking if ip address {ssh_device_facts["primary_ip"]} exists in Netbox...')
+        for i in ipaddress_list:
+            if i['address'] == ssh_device_facts['primary_ip']:
+                print(f'{ssh_device_facts["primary_ip"]} found.')
+                self.nb_ipaddress_data = i
+                return True
+        print(f'{ssh_device_facts["primary_ip"]} NOT found.')
+        return False
+
+    def check_mgmt_int_ip_binding(self, int_info, ip_info):
+        print(f'Checking if ip address is bound to management interface...')
+        if ip_info['assigned_object_id'] == int_info['id']:
+            print('IP address is bound to correct interface.')
+            return True
+        
+        return False
+
+    def set_netbox_device_primary_ip(self, ip_info):
+        required_fields = {
+            'primary_ip4': ip_info['id'],
+        }
+        
+        r = requests.patch(self.apiBaseUrl + '/dcim/devices/' + str(self.nb_device['id']) + '/',
+                        data=json.dumps(required_fields), headers=self.headers)
+        
+        print(r)        
 
     def update_netbox_device(self, ssh_device_facts):
         update_fields = {}
@@ -85,26 +148,140 @@ class Netbox_Device():
             }
             update_fields.update(serial)
 
-        # if ssh_device_facts['primary_ip'] != self.nb_device['primary_ip']['address']:
-        #     address = {
-        #         'primary_ip':{
-        #             'address': ssh_device_facts['primary_ip']
-        #         }
-        #     }
-        #     update_fields.update(address)
-
         r = requests.patch(self.apiBaseUrl + '/dcim/devices/' + str(self.nb_device['id']) + '/',
                         data=json.dumps(update_fields), headers=self.headers)
 
         print(r)
 
     def update_netbox_device_mgmt_ip(self, ssh_device_facts, interface_list, ipaddress_list):
-        update_fields = {}
-        if self.check_mgmt_interface_exists(interface_list):
-            pass
-        else:
-            pass #create mgmt interface
+        
+        correct_binding = False
+        
+        while not correct_binding:
+            if self.check_mgmt_interface_exists(interface_list):
+                if self.check_ipaddress_exists(ipaddress_list, ssh_device_facts):
+                    if self.check_mgmt_int_ip_binding(self.nb_interface_data, self.nb_ipaddress_data):
+                        print('No updates to Management interface required.')
+                        correct_binding = True
+                    else:
+                        self.create_netbox_ip_int_binding(self.nb_interface_data, self.nb_ipaddress_data, ssh_device_facts)
+                        self.set_netbox_device_primary_ip(self.nb_ipaddress_data)
+                        ipaddress_list = self.get_netbox_ipaddress_list()
+                else:
+                    self.create_netbox_mgmt_ipaddress(ssh_device_facts)
+                    ipaddress_list = self.get_netbox_ipaddress_list()
+            else:
+                self.create_netbox_mgmt_interface(ssh_device_facts)
+                interface_list = self.get_netbox_interface_list()
         
 
-    def create_netbox_device(self):
-        pass
+    def create_netbox_device(self, ssh_device_facts):
+        found_device_type = self.match_ssh_device_netbox_device_type(ssh_device_facts)
+        found_device_role = self.match_ssh_device_netbox_device_role()
+        found_device_platform = self.match_ssh_device_netbox_device_platform(ssh_device_facts)
+        found_device_site = self.match_ssh_device_netbox_device_site()
+        
+        device_info = {
+            'name': ssh_device_facts['hostname'],
+            'device_role': found_device_role,
+            'device_type': found_device_type,
+            'site': found_device_site,
+            'status': 'active',
+            'platform': found_device_platform,
+            'serial': ssh_device_facts['serial'],
+        }
+        
+        r = requests.post(self.apiBaseUrl + '/dcim/devices/',
+                        data=json.dumps(device_info), headers=self.headers)
+
+        r= r.json()
+
+        self.nb_device = {
+            'id':r['id']
+        }
+
+
+    def create_netbox_mgmt_interface(self, ssh_device_facts):
+        print('Creating new MGMT interface in Netbox for current device...')
+        required_fields = {
+            'device': self.nb_device['id'],
+            'type':'1000base-t',
+            'enabled': True,
+            'mgmt_only': True
+        }
+
+        if ssh_device_facts['device_type'] == 'nxos':
+            name = {
+                'name': 'mgmt0'
+            }
+            required_fields.update(name)
+        elif ssh_device_facts['device_type'] == 'arista':
+            name = {
+                'name': 'Management1'
+            }
+            required_fields.update(name)
+        
+        r = requests.post(self.apiBaseUrl + '/dcim/interfaces/',
+                        data=json.dumps(required_fields), headers=self.headers)
+
+        print(r)
+
+    def create_netbox_mgmt_ipaddress(self, ssh_device_facts):
+
+        required_fields = {
+            'address': ssh_device_facts['primary_ip']
+        }
+        
+        r = requests.post(self.apiBaseUrl + '/ipam/ip-addresses/',
+                        data=json.dumps(required_fields), headers=self.headers)
+        
+        print(r)
+
+    def create_netbox_ip_int_binding(self, int_data, ip_data, ssh_device_facts):
+
+        required_fields = {
+            'address': ssh_device_facts['primary_ip'],
+            'assigned_object_type': 'dcim.interface',
+            'assigned_object_id': int_data['id']
+        }
+        
+        r = requests.patch(self.apiBaseUrl + '/ipam/ip-addresses/' + str(ip_data['id']) + '/',
+                        data=json.dumps(required_fields), headers=self.headers)
+        
+        print(r)
+
+    def match_ssh_device_netbox_device_type(self, ssh_device_facts):
+        nb_device_type_list = self.get_netbox_device_types()
+
+        for dtype in nb_device_type_list:
+            if dtype['model'] == ssh_device_facts['type']:
+                return dtype['id']
+            else:
+                pass # Create new device type
+
+    def match_ssh_device_netbox_device_role(self):
+        nb_device_role_list = self.get_netbox_device_roles()
+
+        for drole in nb_device_role_list:
+            if drole['name'] == 'Leaf Switch':
+                return drole['id']
+            else:
+                pass # Create new device type
+
+    def match_ssh_device_netbox_device_platform(self, ssh_device_facts):
+        nb_device_platform_list = self.get_netbox_device_platforms()
+
+        for dplatform in nb_device_platform_list:
+            if dplatform['name'] == ssh_device_facts['platform']:
+                return dplatform['id']
+            else:
+                pass # Create new device type
+
+    def match_ssh_device_netbox_device_site(self):
+        nb_device_site_list = self.get_netbox_device_sites()
+
+        for dsite in nb_device_site_list:
+            if dsite['name'] == 'Lab':
+                return dsite['id']
+            else:
+                pass # Create new device type
