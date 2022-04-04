@@ -1,26 +1,56 @@
-import requests
 from scrapli import Scrapli
+from scrapli import exceptions
 import json
 
 class Lab_Device():
-    def __init__(self, primary_ip, driver):
+    # def __init__(self, primary_ip, driver):
+    #     self.primary_ip = primary_ip
+    #     self.driver = driver
+    #     self.username = 'admin'
+    #     self.password = 'admin'
+
+    def __init__(self, primary_ip):
         self.primary_ip = primary_ip
-        self.driver = driver
+        self.driver_list = ['cisco_nxos', 'arista_eos']
+        self.auth_pair = [
+                ('admin', 'admin')
+            ]
         self.username = 'admin'
         self.password = 'admin'
 
-    def get_device_facts(self):    
+    def create_connection(self):
         device = {
             "host": self.primary_ip,
-            "auth_username": self.username,
-            "auth_password": self.password,
+            # "auth_username": self.username,
+            # "auth_password": self.password,
             "auth_strict_key": False,
-            "platform": self.driver
         }
-        conn = Scrapli(**device)
+        try:
+            for driver in self.driver_list:
+                d = {'platform': driver}
+                device.update(d)
+                for auth_pair in self.auth_pair:
+                    pair = {
+                        'auth_username': auth_pair[0],
+                        'auth_password': auth_pair[1],
+                    }
+                    device.update(pair)
+
+                    conn = Scrapli(**device)
+                    conn.open()
+                    if conn.isalive():
+                        return device
+        except:
+            return None
+
+    def get_device_facts(self, device):    
+    
+        conn = Scrapli(**device, timeout_socket=30)
+        
         conn.open()
         response = conn.send_command('show version | json')
         basic_device_facts = json.loads(response.result)
+        
 
         try:
             if 'nxos_ver_str' in basic_device_facts.keys():
@@ -56,6 +86,7 @@ class Lab_Device():
                     'platform':facts[0]['nxos_ver_str'],
                     'type':facts[0]['chassis_id'],
                     'serial':facts[0]['proc_board_id'],
+                    'management_int': 'mgmt0',
                     'primary_ip': prefix + '/' + str(mask),
                     'device_type': device_type,
                 }
@@ -70,6 +101,7 @@ class Lab_Device():
                     'platform':facts[0]['version'],
                     'type':facts[0]['modelName'],
                     'serial':facts[0]['serialNumber'],
+                    'management_int': 'Management1',
                     'primary_ip': prefix + '/' + str(mask),
                     'device_type': device_type,
                 }
