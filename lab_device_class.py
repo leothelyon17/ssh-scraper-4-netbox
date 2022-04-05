@@ -1,5 +1,6 @@
 from scrapli import Scrapli
 from scrapli import exceptions
+import subprocess, platform
 import json
 
 class Lab_Device():
@@ -15,14 +16,10 @@ class Lab_Device():
         self.auth_pair = [
                 ('admin', 'admin')
             ]
-        self.username = 'admin'
-        self.password = 'admin'
 
     def create_connection(self):
         device = {
             "host": self.primary_ip,
-            # "auth_username": self.username,
-            # "auth_password": self.password,
             "auth_strict_key": False,
         }
         try:
@@ -33,20 +30,20 @@ class Lab_Device():
                     pair = {
                         'auth_username': auth_pair[0],
                         'auth_password': auth_pair[1],
+                        'auth_secondary': auth_pair[1]
                     }
                     device.update(pair)
-
                     conn = Scrapli(**device)
                     conn.open()
+        
                     if conn.isalive():
                         return device
         except:
-            return None
+            None
 
     def get_device_facts(self, device):    
-    
-        conn = Scrapli(**device, timeout_socket=30)
         
+        conn = Scrapli(**device)
         conn.open()
         response = conn.send_command('show version | json')
         basic_device_facts = json.loads(response.result)
@@ -108,3 +105,12 @@ class Lab_Device():
                 return device_nb_dict
         except:
             return 'Error: Cannot set device facts.'
+
+    def pingOk(self, sHost):
+        try:
+            output = subprocess.check_output("ping -{} 2 {}".format('n' if platform.system().lower()=="windows" else 'c', sHost), shell=True)
+
+        except Exception:
+            return False
+
+        return True

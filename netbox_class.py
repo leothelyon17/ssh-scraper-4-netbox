@@ -61,12 +61,16 @@ class Netbox_Device():
         return resp['results']
 
 
-    def netbox_device_instance_data(self, ssh_device_facts, netbox_device_list):
+    def find_and_set_device_instance_data(self, ssh_device_facts, netbox_device_list):
+        """Attempts to find and set the existing netbox device instance data to be used with the Netbox class.
+            Uses the gathered facts from ssh device and netbox device list API data."""
+        
         for nb_device in netbox_device_list:
             if ssh_device_facts['hostname'] == nb_device['name']:
                 self.nb_device = nb_device
                 return True
 
+    
     def check_mgmt_interface_exists(self, interface_list):
         print('Checking if MGMT interface exists in Netbox...')
         for i in interface_list:
@@ -109,9 +113,7 @@ class Netbox_Device():
         }
         
         r = requests.patch(self.apiBaseUrl + '/dcim/devices/' + str(self.nb_device['id']) + '/',
-                        data=json.dumps(required_fields), headers=self.headers)
-        
-        print(r)        
+                        data=json.dumps(required_fields), headers=self.headers)     
 
     def update_netbox_device(self, ssh_device_facts):
         update_fields = {}
@@ -150,8 +152,6 @@ class Netbox_Device():
 
         r = requests.patch(self.apiBaseUrl + '/dcim/devices/' + str(self.nb_device['id']) + '/',
                         data=json.dumps(update_fields), headers=self.headers)
-
-        print(r)
 
     def update_netbox_device_mgmt_ip(self, ssh_device_facts, interface_list, ipaddress_list):
         
@@ -224,8 +224,6 @@ class Netbox_Device():
         r = requests.post(self.apiBaseUrl + '/dcim/interfaces/',
                         data=json.dumps(required_fields), headers=self.headers)
 
-        print(r)
-
     def create_netbox_mgmt_ipaddress(self, ssh_device_facts):
 
         required_fields = {
@@ -235,7 +233,7 @@ class Netbox_Device():
         r = requests.post(self.apiBaseUrl + '/ipam/ip-addresses/',
                         data=json.dumps(required_fields), headers=self.headers)
         
-        print(r)
+        # print(r)
 
     def create_netbox_ip_int_binding(self, int_data, ip_data, ssh_device_facts):
 
@@ -248,7 +246,7 @@ class Netbox_Device():
         r = requests.patch(self.apiBaseUrl + '/ipam/ip-addresses/' + str(ip_data['id']) + '/',
                         data=json.dumps(required_fields), headers=self.headers)
         
-        print(r)
+        # print(r)
 
     def match_ssh_device_netbox_device_type(self, ssh_device_facts):
         nb_device_type_list = self.get_netbox_device_types()
@@ -285,3 +283,4 @@ class Netbox_Device():
                 return dsite['id']
             else:
                 pass # Create new device type
+

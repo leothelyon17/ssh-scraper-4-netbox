@@ -1,0 +1,59 @@
+{
+"device_list" : [
+        {
+            "device": "172.16.99.55",
+            "ssh_device_facts": {
+                "hostname": "nxos-test", 
+                "manufacturer": "Cisco Systems, Inc.", 
+                "platform": "9.3(2)", 
+                "type": "Nexus9000 9000v Chassis", 
+                "serial": "9WUYXNAU0IM", 
+                "management_int": "mgmt0", 
+                "primary_ip": "172.16.99.55/24", 
+                "device_type": "nxos"
+            }   
+        },
+        
+        {
+            "device": "172.16.99.54",
+            "ssh_device_facts": {
+                "hostname": "eos-test", 
+                "manufacturer": "Arista", 
+                "platform": "4.24.2FX-EVPN-MCAST.1", 
+                "type": "vEOS", 
+                "serial": "", 
+                "management_int": "Management1", 
+                "primary_ip": "172.16.99.54/24", 
+                "device_type": "arista"
+            } 
+        },
+
+        {
+            "device": "172.16.99.200",
+            "ssh_device_facts": {
+                "hostname": "eos-test-200", 
+                "manufacturer": "Arista", 
+                "platform": "4.24.2FX-EVPN-MCAST.1", 
+                "type": "vEOS", 
+                "serial": "", 
+                "management_int": "Management1", 
+                "primary_ip": "172.16.99.200/24", 
+                "device_type": "arista"
+            }   
+        },
+
+        {
+            "device": "172.16.99.210",
+            "ssh_device_facts": {
+                "hostname": "nxos-test-210", 
+                "manufacturer": "Cisco Systems, Inc.", 
+                "platform": "9.3(2)", 
+                "type": "Nexus9000 9000v Chassis", 
+                "serial": "9WUYXJJU0IM", 
+                "management_int": "mgmt0", 
+                "primary_ip": "172.16.99.210/24", 
+                "device_type": "nxos"
+            }   
+        }
+    ]
+}
