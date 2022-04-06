@@ -1,5 +1,6 @@
 import requests
 import json
+import re
 
 class Netbox_Device():
     def __init__(self):
@@ -11,6 +12,19 @@ class Netbox_Device():
             'Authorization': 'Token 374c7f7675c9dcc1ed847bd524799c6418b4358d'
         }
 
+    def create_netbox_slug(self,string):
+        special_characters = ".!@#$%^&*()+?=,<>\/\""
+        slug = ''
+
+        for c in string:
+            if c in special_characters:
+                slug += '-'
+            else:
+                slug += c
+
+        return slug.replace(' ','').lower()
+
+    
     def get_netbox_device_list(self):  
         resp = requests.get(self.apiBaseUrl + '/dcim/devices/',
                         headers=self.headers).json()
@@ -55,6 +69,13 @@ class Netbox_Device():
 
     def get_netbox_device_sites(self):  
         resp = requests.get(self.apiBaseUrl + '/dcim/sites/',
+                        headers=self.headers).json()
+    
+        #print (resp)
+        return resp['results']
+
+    def get_netbox_device_manufacturers(self):  
+        resp = requests.get(self.apiBaseUrl + '/dcim/manufacturers/',
                         headers=self.headers).json()
     
         #print (resp)
@@ -248,6 +269,31 @@ class Netbox_Device():
         
         # print(r)
 
+    def create_netbox_platform(self, ssh_device_facts):
+
+        required_fields = {
+            'name': ssh_device_facts['platform'],
+            'slug': self.create_netbox_slug(ssh_device_facts['platform']),
+            'manufacturer': self.match_ssh_device_netbox_device_manufacturer(ssh_device_facts)
+        }
+        
+        r = requests.post(self.apiBaseUrl + '/dcim/platforms/',
+                        data=json.dumps(required_fields), headers=self.headers)
+        
+        #print(r, r.content)
+
+    def create_netbox_manufacturer(self, ssh_device_facts):
+
+        required_fields = {
+            'name': ssh_device_facts['manufacturer'],
+            'slug': self.create_netbox_slug(ssh_device_facts['manufacturer']),
+        }
+        
+        r = requests.post(self.apiBaseUrl + '/dcim/manufacturers/',
+                        data=json.dumps(required_fields), headers=self.headers)
+        
+        print(r, r.content)
+
     def match_ssh_device_netbox_device_type(self, ssh_device_facts):
         nb_device_type_list = self.get_netbox_device_types()
 
@@ -272,8 +318,9 @@ class Netbox_Device():
         for dplatform in nb_device_platform_list:
             if dplatform['name'] == ssh_device_facts['platform']:
                 return dplatform['id']
-            else:
-                pass # Create new device type
+            
+        self.create_netbox_platform(ssh_device_facts)
+        self.match_ssh_device_netbox_device_platform(ssh_device_facts)
 
     def match_ssh_device_netbox_device_site(self):
         nb_device_site_list = self.get_netbox_device_sites()
@@ -283,4 +330,14 @@ class Netbox_Device():
                 return dsite['id']
             else:
                 pass # Create new device type
+
+    def match_ssh_device_netbox_device_manufacturer(self, ssh_device_facts):
+        nb_device_manufacturers_list = self.get_netbox_device_manufacturers()
+
+        for dmanufacturer in nb_device_manufacturers_list:
+            if dmanufacturer['name'] == ssh_device_facts['manufacturer']:
+                return dmanufacturer['id']
+        
+        self.create_netbox_manufacturer(ssh_device_facts)
+        self.match_ssh_device_netbox_device_manufacturer(ssh_device_facts)
 
