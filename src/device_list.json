@@ -22,7 +22,7 @@
                 "manufacturer": "Cisco Systems, Inc.", 
                 "platform": "9.3(2)", 
                 "type": "Nexus9000 9000v Chassis", 
-                "serial": "9WUYXJJU0IM", 
+                "serial": "STUFFSTUFF123", 
                 "management_int": "mgmt0", 
                 "primary_ip": "172.16.99.210/24", 
                 "device_type": "nxos"
@@ -35,11 +35,11 @@
                 "hostname": "big-j-9k-proto-test", 
                 "manufacturer": "JJ Land, Inc", 
                 "platform": "11.1.12rev-a", 
-                "type": "Nexus9000 9000v Chassis", 
+                "type": "JJ 9K ripoff", 
                 "serial": "ASSSSSSSSS", 
-                "management_int": "mgmt0", 
+                "management_int": "ens0", 
                 "primary_ip": "172.16.99.225/24", 
-                "device_type": "nxos"
+                "device_type": "jj-other"
             }   
         }
     ]

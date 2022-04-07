@@ -11,6 +11,11 @@ class Netbox_Device():
             'Accept': 'application/json',
             'Authorization': 'Token 374c7f7675c9dcc1ed847bd524799c6418b4358d'
         }
+        self.nb_device = {
+            'platform':{
+                    'name': 'none'
+            }
+        }
 
     def create_netbox_slug(self,string):
         special_characters = ".!@#$%^&*()+?=,<>\/\""
@@ -104,6 +109,11 @@ class Netbox_Device():
                     self.nb_interface_data = i
                     print('Found existing Cisco NXOS MGMT device in Netbox.')
                     return True
+                elif self.nb_device['device_type']['manufacturer']['name'] and i['name']:
+                #elif self.nb_device['device_type']['manufacturer']['name'] == 'JJ Land, Inc' and i['name'] == 'ens0':
+                    self.nb_interface_data = i
+                    print('Found existing Generic MGMT device in Netbox.')
+                    return True
                 else:
                     print('Interface Error.')
                     return False
@@ -139,40 +149,16 @@ class Netbox_Device():
     def update_netbox_device(self, ssh_device_facts):
         update_fields = {}
 
-        if ssh_device_facts['manufacturer'] != self.nb_device['device_type']['manufacturer']['name']:
-            manufacturer = {
-                'device_type':{
-                    'manufacturer': {
-                        'name': ssh_device_facts['manufacturer']
-                    }
-                }
-            }
-            update_fields.update(manufacturer)
-
-        if ssh_device_facts['platform'] != self.nb_device['platform']['name']:
-            platform = {
-                'platform':{
-                    'name': ssh_device_facts['platform']
-                }
-            }
-            update_fields.update(platform)
-
-        if ssh_device_facts['type'] != self.nb_device['device_type']['model']:
-            model = {
-                'device_type':{
-                    'model': ssh_device_facts['type']
-                }
-            }
-            update_fields.update(model)
-
-        if ssh_device_facts['serial'] != self.nb_device['serial']:
-            serial = {
-                'serial': ssh_device_facts['serial']
-            }
-            update_fields.update(serial)
-
-        r = requests.patch(self.apiBaseUrl + '/dcim/devices/' + str(self.nb_device['id']) + '/',
+        update_fields.update(self.update_device_manufacturer(ssh_device_facts))
+        update_fields.update(self.update_device_platform(ssh_device_facts))
+        update_fields.update(self.update_device_model(ssh_device_facts))
+        update_fields.update(self.update_device_serial(ssh_device_facts))
+        
+        if update_fields:
+            r = requests.patch(self.apiBaseUrl + '/dcim/devices/' + str(self.nb_device['id']) + '/',
                         data=json.dumps(update_fields), headers=self.headers)
+
+            #print(r, r.content)
 
     def update_netbox_device_mgmt_ip(self, ssh_device_facts, interface_list, ipaddress_list):
         
@@ -215,6 +201,7 @@ class Netbox_Device():
         r = requests.post(self.apiBaseUrl + '/dcim/devices/',
                         data=json.dumps(device_info), headers=self.headers)
 
+        print(r, r.content)
         r= r.json()
 
         self.nb_device = {
@@ -241,9 +228,18 @@ class Netbox_Device():
                 'name': 'Management1'
             }
             required_fields.update(name)
+
+        else:
+            name = {
+                'name': 'ens0'
+            }
+            required_fields.update(name)
         
+        print(required_fields)
         r = requests.post(self.apiBaseUrl + '/dcim/interfaces/',
                         data=json.dumps(required_fields), headers=self.headers)
+
+        print(r, r.content)
 
     def create_netbox_mgmt_ipaddress(self, ssh_device_facts):
 
@@ -294,14 +290,28 @@ class Netbox_Device():
         
         print(r, r.content)
 
+    def create_netbox_device_type(self, ssh_device_facts):
+
+        required_fields = {
+            'manufacturer': self.match_ssh_device_netbox_device_manufacturer(ssh_device_facts),
+            'model': ssh_device_facts['type'],
+            'slug': self.create_netbox_slug(ssh_device_facts['type']),
+        }
+        
+        r = requests.post(self.apiBaseUrl + '/dcim/device-types/',
+                        data=json.dumps(required_fields), headers=self.headers)
+        
+        print(r, r.content)
+
     def match_ssh_device_netbox_device_type(self, ssh_device_facts):
         nb_device_type_list = self.get_netbox_device_types()
 
         for dtype in nb_device_type_list:
             if dtype['model'] == ssh_device_facts['type']:
                 return dtype['id']
-            else:
-                pass # Create new device type
+        
+        self.create_netbox_device_type(ssh_device_facts)
+        return self.match_ssh_device_netbox_device_type(ssh_device_facts)
 
     def match_ssh_device_netbox_device_role(self):
         nb_device_role_list = self.get_netbox_device_roles()
@@ -317,10 +327,10 @@ class Netbox_Device():
 
         for dplatform in nb_device_platform_list:
             if dplatform['name'] == ssh_device_facts['platform']:
-                return dplatform['id']
+                return int(dplatform['id'])
             
         self.create_netbox_platform(ssh_device_facts)
-        self.match_ssh_device_netbox_device_platform(ssh_device_facts)
+        return self.match_ssh_device_netbox_device_platform(ssh_device_facts)
 
     def match_ssh_device_netbox_device_site(self):
         nb_device_site_list = self.get_netbox_device_sites()
@@ -339,5 +349,73 @@ class Netbox_Device():
                 return dmanufacturer['id']
         
         self.create_netbox_manufacturer(ssh_device_facts)
-        self.match_ssh_device_netbox_device_manufacturer(ssh_device_facts)
+        return self.match_ssh_device_netbox_device_manufacturer(ssh_device_facts)
 
+    def update_device_platform(self, ssh_device_facts):
+        platform = {}
+        
+        if not self.nb_device['platform']:
+            self.nb_device.update({'platform':{'name': ''}})
+            self.update_device_platform(ssh_device_facts)
+
+        if ssh_device_facts['platform'] != self.nb_device['platform']['name']:
+            platform = {
+                'platform':{
+                    'name': ssh_device_facts['platform']
+                }
+            }
+        return platform
+        
+    def update_device_manufacturer(self, ssh_device_facts):
+        manufacturer = {}
+        
+        if not self.nb_device['device_type']['manufacturer']:
+            manufacturer = {
+                'device_type':{
+                    'manufacturer': {
+                        'name': ssh_device_facts['manufacturer']
+                    }
+                }
+            }
+        elif ssh_device_facts['manufacturer'] != self.nb_device['device_type']['manufacturer']['name']:
+            manufacturer = {
+                'device_type':{
+                    'manufacturer': {
+                        'name': ssh_device_facts['manufacturer']
+                    }
+                }
+            }
+
+        return manufacturer
+
+    def update_device_model(self, ssh_device_facts):
+        model = {}
+        
+        if not self.nb_device['device_type']['model']:
+            model = {
+                'device_type':{
+                    'model': ssh_device_facts['type']
+                }
+            }
+        elif ssh_device_facts['type'] != self.nb_device['device_type']['model']:
+            model = {
+                'device_type':{
+                    'model': ssh_device_facts['type']
+                }
+            }
+
+        return model
+
+    def update_device_serial(self, ssh_device_facts):
+        serial = {}
+        
+        if not self.nb_device['serial']:
+            serial = {
+                'serial': ssh_device_facts['serial']
+            }
+        elif ssh_device_facts['serial'] != self.nb_device['serial']:
+            serial = {
+                'serial': ssh_device_facts['serial']
+            }
+
+        return serial

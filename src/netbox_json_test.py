@@ -1,6 +1,7 @@
 from netbox_class import *
 from lab_device_class import *
 
+
 def get_netbox_data():
     global nb_device_list, nb_interface_list, nb_ipaddress_list
     
